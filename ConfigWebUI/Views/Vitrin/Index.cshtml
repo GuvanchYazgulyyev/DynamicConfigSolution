@@ -16,18 +16,28 @@
 <table class="table">
     <thead>
         <tr>
-            <th>Anahtar</th>
+            <th>Gelen Id</th>
             <th>Değer</th>
         </tr>
     </thead>
     <tbody>
-        @foreach (var config in Model)
+        @if (Model != null)
         {
-            <tr>
-                <td>@config.Key</td>
-                <td>@config.Value</td>
-            </tr>
+            foreach (var config in Model)
+            {
+                <tr>
+                    <td>@config.Key</td>
+                    <td>@config.Value</td>
+                </tr>
+            }
         }
+        else
+        {
+            <H2>
+                Modelde Veri Bulunamadı veya API ile baglantı kurulamadı!!!
+            </H2>
+        }
+
     </tbody>
 </table>
 

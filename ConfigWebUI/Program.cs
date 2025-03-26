@@ -2,18 +2,23 @@
 
 // Servisleri ekle
 builder.Services.AddControllersWithViews();
-builder.Services.AddHttpClient();
 
-// Çevresel değişkenlere göre Redis veya diğer servis URL'lerini ayarla
-var configApiUrl = builder.Configuration.GetValue<string>("ConfigApiUrl") ?? "http://configwebapi:5000";
+// HTTP Client için ConfigApi base URL ayarını yap
+var configApiUrl = builder.Configuration.GetValue<string>("ConfigApiUrl") ?? "http://config_api:5000"; // Docker içindeki api adı
 
-// HTTP Client için base URL ayarını yap
-builder.Services.AddHttpClient("ConfigApi", client => client.BaseAddress = new Uri(configApiUrl));
+builder.Services.AddHttpClient("ConfigApi", client =>
+{
+    client.BaseAddress = new Uri(configApiUrl);
+    client.DefaultRequestHeaders.Add("Accept", "application/json");
+});
 
 var app = builder.Build();
 
 app.UseStaticFiles();
 app.UseRouting();
 app.UseAuthorization();
+
+// Controller'ları map et
 app.MapControllerRoute(name: "default", pattern: "{controller=Vitrin}/{action=Index}/{id?}");
+
 app.Run();

@@ -6,24 +6,34 @@ namespace ConfigWebUI.Controllers
 {
     public class VitrinController : Controller
     {
-        private readonly HttpClient _httpClient;
+        private readonly IHttpClientFactory _httpClientFactory;
 
-        public VitrinController(HttpClient httpClient)
+        public VitrinController(IHttpClientFactory httpClientFactory)
         {
-            _httpClient = httpClient;
+            _httpClientFactory = httpClientFactory;
         }
 
         public async Task<IActionResult> Index()
         {
-            var response = await _httpClient.GetAsync("http://configwebapi:5000/api/configuration/SERVICE-A");
-            if (!response.IsSuccessStatusCode)
+            try
             {
-                return View(new List<ConfigItem>());
-            }
+                // ConfigApi'ye bağlanıyoruz
+                var client = _httpClientFactory.CreateClient("ConfigApi");
+                var response = await client.GetAsync("/api/configuration/SERVICE-A");
 
-            var jsonString = await response.Content.ReadAsStringAsync();
-            var configList = JsonConvert.DeserializeObject<List<ConfigItem>>(jsonString);
-            return View(configList);
+                if (!response.IsSuccessStatusCode)
+                {
+                    return View(new List<ConfigItem>());
+                }
+
+                var jsonString = await response.Content.ReadAsStringAsync();
+                var configList = JsonConvert.DeserializeObject<List<ConfigItem>>(jsonString);
+                return View(configList);
+            }
+            catch (Exception ex)
+            {
+                return View();
+            }
         }
 
         [HttpPost]
@@ -32,7 +42,8 @@ namespace ConfigWebUI.Controllers
             if (!ModelState.IsValid) return RedirectToAction("Index");
 
             var content = new StringContent(JsonConvert.SerializeObject(model), System.Text.Encoding.UTF8, "application/json");
-            var response = await _httpClient.PostAsync("http://configwebapi:5000/api/configuration", content);
+            var client = _httpClientFactory.CreateClient("ConfigApi");
+            var response = await client.PostAsync("/api/configuration", content);
 
             if (response.IsSuccessStatusCode)
                 TempData["Message"] = "Konfigürasyon başarıyla eklendi!";
@@ -43,3 +54,74 @@ namespace ConfigWebUI.Controllers
         }
     }
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+//using ConfigWebUI.Models;
+//using Microsoft.AspNetCore.Mvc;
+//using Newtonsoft.Json;
+
+//namespace ConfigWebUI.Controllers
+//{
+//    public class VitrinController : Controller
+//    {
+//        private readonly HttpClient _httpClient;
+
+//        public VitrinController(HttpClient httpClient)
+//        {
+//            _httpClient = httpClient;
+//        }
+
+//        public async Task<IActionResult> Index()
+//        {
+//            try
+//            {
+//                // Swagger// var response = await _httpClient.GetAsync("https://localhost:7233/api/configuration/configuration");
+//                var response = await _httpClient.GetAsync("http://configwebapi:5000/api/configuration/SERVICE-A");
+//                if (!response.IsSuccessStatusCode)
+//                {
+//                    return View(new List<ConfigItem>());
+//                }
+
+//                var jsonString = await response.Content.ReadAsStringAsync();
+//                var configList = JsonConvert.DeserializeObject<List<ConfigItem>>(jsonString);
+//                return View(configList);
+//            }
+//            catch (Exception ex)
+//            {
+//                return View();
+//            }
+
+//        }
+
+//        [HttpPost]
+//        public async Task<IActionResult> Add(ConfigItem model)
+//        {
+//            if (!ModelState.IsValid) return RedirectToAction("Index");
+
+//            var content = new StringContent(JsonConvert.SerializeObject(model), System.Text.Encoding.UTF8, "application/json");
+//            var response = await _httpClient.PostAsync("http://configwebapi:5000/api/configuration", content);
+
+//            if (response.IsSuccessStatusCode)
+//                TempData["Message"] = "Konfigürasyon başarıyla eklendi!";
+//            else
+//                TempData["Message"] = "Konfigürasyon eklenirken bir hata oluştu.";
+
+//            return RedirectToAction("Index");
+//        }
+//    }
+//}

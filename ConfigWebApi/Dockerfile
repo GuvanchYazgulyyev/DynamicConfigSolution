@@ -1,80 +1,62 @@
-﻿# Temel ASP.NET runtime imajı
+﻿## Temel ASP.NET runtime imajı
+#FROM mcr.microsoft.com/dotnet/aspnet:8.0 AS base
+#WORKDIR /app
+#EXPOSE 5000
+#
+## SDK içeren build imajı
+#FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
+#WORKDIR /src
+#
+## Projeyi kopyala ve bağımlılıkları yükle
+#COPY ConfigWebApi/ConfigWebApi.csproj ./ConfigWebApi/
+#RUN dotnet restore "./ConfigWebApi/ConfigWebApi.csproj"
+#
+## Kalan tüm dosyaları kopyala
+#COPY . .
+#
+## Çalışma dizinini belirle
+#WORKDIR "/src/ConfigWebApi"
+#
+## Projeyi build et
+#RUN dotnet build -c Release -o /app/build
+#
+## Yayın (Publish) et
+#FROM build AS publish
+#RUN dotnet publish -c Release -o /app/publish
+#
+## Final image
+#FROM base AS final
+#WORKDIR /app
+#COPY --from=publish /app/publish .
+#
+## Uygulamayı başlat
+#ENTRYPOINT ["dotnet", "ConfigWebApi.dll"]
+#
+
+
+
+# Temel imajı belirle
 FROM mcr.microsoft.com/dotnet/aspnet:8.0 AS base
 WORKDIR /app
 EXPOSE 5000
 
-# SDK içeren build imajı
+# Uygulama dosyalarını kopyala ve build et
 FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
 WORKDIR /src
-
-# Projeyi kopyala ve bağımlılıkları yükle
-COPY ConfigWebApi/ConfigWebApi.csproj ./ConfigWebApi/
-RUN dotnet restore "./ConfigWebApi/ConfigWebApi.csproj"
-
-# Kalan tüm dosyaları kopyala
+COPY ["ConfigWebApi/ConfigWebApi.csproj", "ConfigWebApi/"]
+RUN dotnet restore "ConfigWebApi/ConfigWebApi.csproj"
 COPY . .
-
-# Çalışma dizinini belirle
 WORKDIR "/src/ConfigWebApi"
+RUN dotnet build "ConfigWebApi.csproj" -c Release -o /app/build
 
-# Projeyi build et
-RUN dotnet build -c Release -o /app/build
-
-# Yayın (Publish) et
 FROM build AS publish
-RUN dotnet publish -c Release -o /app/publish
+RUN dotnet publish "ConfigWebApi.csproj" -c Release -o /app/publish
 
-# Final image
 FROM base AS final
 WORKDIR /app
 COPY --from=publish /app/publish .
-
-# Uygulamayı başlat
 ENTRYPOINT ["dotnet", "ConfigWebApi.dll"]
 
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-## Temel image olarak .NET 8 kullanılıyor
-#FROM mcr.microsoft.com/dotnet/aspnet:8.0 AS base
-#WORKDIR /app
-#EXPOSE 5000
-#
-## Build için SDK image'ı
-#FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
-#WORKDIR /src
-#
-## Projeyi kopyala ve restore et
-#COPY ConfigWebApi/ConfigWebApi.csproj ./ConfigWebApi/
-#RUN dotnet restore "ConfigWebApi/ConfigWebApi.csproj"
-#
-## Tüm dosyaları kopyala
-#COPY . .
-#
-## Çalışma dizinini belirle ve projeyi build et
-#WORKDIR "/src/ConfigWebApi"
-#RUN dotnet build -c Release -o /app/build
-#
-## Projeyi publish et
-#FROM build AS publish
-#RUN dotnet publish -c Release -o /app/publish
-#
-## Final image, yalnızca publish edilmiş dosyalar taşınır
-#FROM base AS final
-#WORKDIR /app
-#COPY --from=publish /app/publish .
-#
-## Konteyner başlatıldığında çalışacak komut
-#ENTRYPOINT ["dotnet", "ConfigWebApi.dll"]
-#

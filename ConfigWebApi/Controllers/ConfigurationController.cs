@@ -25,10 +25,15 @@ namespace ConfigWebApi.Controllers
             return Ok(configs);
         }
 
+        /// <summary>
+        /// Redise Veri Ekle!
+        /// </summary>
+        /// <param name="request"></param>
+        /// <returns></returns>
         [HttpPost]
         public async Task<IActionResult> SetConfiguration([FromBody] ConfigRequest request)
         {
-            var success = await _configService.SetConfigurationAsync(request.ApplicationName, request.Key, request.Value);
+            var success = await _configService.SetConfigurationAsync(request.ApplicationName, request.Key, request.Value, request.Name, request.Surname, request.Email, request.Phone);
             if (success)
                 return Ok(new { message = "Configuration saved successfully!" });
 
@@ -41,5 +46,9 @@ namespace ConfigWebApi.Controllers
         public string ApplicationName { get; set; }
         public string Key { get; set; }
         public string Value { get; set; }
+        public string Name { get; set; }
+        public string Surname { get; set; }
+        public string Email { get; set; }
+        public string Phone { get; set; }
     }
 }
