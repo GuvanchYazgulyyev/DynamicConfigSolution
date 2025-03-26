@@ -1,118 +1,162 @@
-﻿
-
-using StackExchange.Redis;
+﻿using StackExchange.Redis;
 using Microsoft.Extensions.Configuration;
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Threading.Tasks;
 
 namespace ConfigWebApi.Services
 {
-    public class RedisService
+    public class RedisService : IDisposable
     {
-        private static Lazy<ConnectionMultiplexer> _redisLazy;
+        private Lazy<ConnectionMultiplexer> _redisLazy;
         private readonly IDatabase _database;
-        private string? redisConnectionString;
+        private bool _disposed = false;
 
-        // RedisService sınıfı oluşturulurken bağlantı dizesi alınabilir
+        // Constructor: Redis bağlantısını başlatır
         public RedisService(IConfiguration configuration)
         {
-            // appsettings.json'dan Redis bağlantı dizesini almak
-            string redisConnectionString = configuration.GetValue<string>("Redis:ConnectionString") ?? "localhost:6379";
+            string redisConnectionString = configuration["Redis:ConnectionString"] ?? "localhost:6379";
 
-            if (_redisLazy == null)
+            if (string.IsNullOrEmpty(redisConnectionString))
             {
-                _redisLazy = new Lazy<ConnectionMultiplexer>(() => ConnectionMultiplexer.Connect(redisConnectionString));
+                throw new ArgumentNullException(nameof(redisConnectionString), "Redis bağlantı dizesi boş olamaz.");
             }
 
+            _redisLazy = new Lazy<ConnectionMultiplexer>(() => ConnectionMultiplexer.Connect(redisConnectionString));
             _database = _redisLazy.Value.GetDatabase();
         }
 
-        public RedisService(string? redisConnectionString)
+        // Constructor: Redis bağlantısı dizisi ile oluşturulmuş alternatif yapı
+        public RedisService(string redisConnectionString)
         {
-            this.redisConnectionString = redisConnectionString;
+            if (string.IsNullOrEmpty(redisConnectionString))
+            {
+                throw new ArgumentNullException(nameof(redisConnectionString), "Redis bağlantı dizesi boş olamaz.");
+            }
+
+            _redisLazy = new Lazy<ConnectionMultiplexer>(() => ConnectionMultiplexer.Connect(redisConnectionString));
+            _database = _redisLazy.Value.GetDatabase();
         }
 
-        // Yapılandırma verilerini almak için asenkron metod
+        // Redis bağlantısını test etmek için kullanılan metot
+        public async Task TestConnectionAsync()
+        {
+            try
+            {
+                if (_redisLazy == null || _redisLazy.Value == null)
+                {
+                    throw new InvalidOperationException("Redis bağlantısı başlatılamadı.");
+                }
+
+                var pingResult = await _database.PingAsync();
+                Console.WriteLine($"Redis ping süresi: {pingResult.TotalMilliseconds} ms");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Redis bağlantı testi hatası: {ex.Message}");
+            }
+        }
+
+        // Belirli bir uygulamaya ait konfigürasyonları Redis'ten almak için kullanılan metot
         public async Task<List<KeyValuePair<string, string>>> GetConfigurationsAsync(string applicationName)
         {
-            var server = _redisLazy.Value.GetServer(_redisLazy.Value.GetEndPoints()[0]);
-            var keys = server.Keys(pattern: $"{applicationName}:*").ToList(); // ToList() ekledik
-
-            var configs = new List<KeyValuePair<string, string>>();
-
-            foreach (var key in keys)
+            try
             {
-                string? value = await _database.StringGetAsync(key);
-                if (value != null && value.Contains("IsActive") && value.Contains("1"))
+                if (_redisLazy == null || _redisLazy.Value == null)
                 {
-                    configs.Add(new KeyValuePair<string, string>(key.ToString().Replace($"{applicationName}:", ""), value));
+                    throw new InvalidOperationException("Redis bağlantısı başlatılamadı. Lütfen bağlantı dizesini kontrol edin.");
                 }
+
+                var endPoints = _redisLazy.Value.GetEndPoints();
+                if (endPoints == null || !endPoints.Any())
+                {
+                    throw new InvalidOperationException("Redis uç noktası bulunamadı. Lütfen Redis sunucusunun çalıştığından emin olun.");
+                }
+
+                var server = _redisLazy.Value.GetServer(endPoints[0]);
+                var keys = server.Keys(pattern: $"{applicationName}:*").ToList();
+
+                var configs = new List<KeyValuePair<string, string>>();
+
+                foreach (var key in keys)
+                {
+                    try
+                    {
+                        string? value = await _database.StringGetAsync(key);
+                        if (value != null && value.Contains("IsActive") && value.Contains("1"))
+                        {
+                            configs.Add(new KeyValuePair<string, string>(key.ToString().Replace($"{applicationName}:", ""), value));
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine($"Anahtar: {key} okunurken hata oluştu: {ex.Message}");
+                    }
+                }
+                return configs;
             }
-            return configs;
+            catch (Exception ex)
+            {
+                Console.WriteLine($"GetConfigurationsAsync hatası: {ex.Message}");
+                return new List<KeyValuePair<string, string>>();
+            }
+        }
+
+        // Konfigürasyon verisini Redis'e yazmak için kullanılan metot
+        public async Task<bool> SetConfigurationAsync(string applicationName, string key, string value, string name, string surname, string email, string phone)
+        {
+            try
+            {
+                if (_redisLazy == null || _redisLazy.Value == null)
+                {
+                    throw new InvalidOperationException("Redis bağlantısı başlatılamadı. Lütfen bağlantı dizesini kontrol edin.");
+                }
+
+                // Veriyi Redis'e yaz
+                await _database.StringSetAsync($"{applicationName}:{key}:value", value);
+                await _database.StringSetAsync($"{applicationName}:{key}:name", name);
+                await _database.StringSetAsync($"{applicationName}:{key}:surname", surname);
+                await _database.StringSetAsync($"{applicationName}:{key}:email", email);
+                await _database.StringSetAsync($"{applicationName}:{key}:phone", phone);
+
+                return true;
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"SetConfigurationAsync hatası: {ex.Message}");
+                return false;
+            }
         }
 
 
-        // Yeni bir yapılandırma eklemek için asenkron metod
-        public async Task<bool> SetConfigurationAsync(string applicationName, string key, string value)
+        // IDisposable implementasyonu: Bağlantı kapanışı
+        public void Dispose()
         {
-            return await _database.StringSetAsync($"{applicationName}:{key}", value);
+            Dispose(true);
+            GC.SuppressFinalize(this);
+        }
+
+        // Nesne dispose işlemi
+        protected virtual void Dispose(bool disposing)
+        {
+            if (!_disposed)
+            {
+                if (disposing)
+                {
+                    if (_redisLazy != null && _redisLazy.IsValueCreated)
+                    {
+                        _redisLazy.Value.Dispose();
+                    }
+                }
+                _disposed = true;
+            }
+        }
+
+        // Finalizer
+        ~RedisService()
+        {
+            Dispose(false);
         }
     }
 }
-
-
-
-
-
-
-
-
-
-
-
-//using StackExchange.Redis;
-
-//namespace ConfigWebApi.Services
-//{
-//    public class RedisService
-//    {
-//        private static Lazy<ConnectionMultiplexer> _redisLazy;
-//        private readonly IDatabase _database;
-
-//        static RedisService()
-//        {
-//            // Redis bağlantısı, uygulama boyunca sadece bir kez oluşturulur.
-//            _redisLazy = new Lazy<ConnectionMultiplexer>(() => ConnectionMultiplexer.Connect("localhost:6379"));
-//        }
-
-//        public RedisService(string? redisConnectionString)
-//        {
-//            _database = _redisLazy.Value.GetDatabase();
-//        }
-
-//        public async Task<List<KeyValuePair<string, string>>> GetConfigurationsAsync(string applicationName)
-//        {
-//            var server = _redisLazy.Value.GetServer(_redisLazy.Value.GetEndPoints()[0]);
-//            var keys = server.Keys(pattern: $"{applicationName}:*");
-
-//            var configs = new List<KeyValuePair<string, string>>();
-//            foreach (var key in keys)
-//            {
-//                string? value = await _database.StringGetAsync(key);
-//                if (value != null)
-//                {
-//                    // IsActive kontrolü eklenebilir
-//                    if (value.Contains("IsActive") && value.Contains("1"))
-//                    {
-//                        configs.Add(new KeyValuePair<string, string>(key.ToString().Replace($"{applicationName}:", ""), value));
-//                    }
-//                }
-//            }
-//            return configs;
-//        }
-
-//        public async Task<bool> SetConfigurationAsync(string applicationName, string key, string value)
-//        {
-//            return await _database.StringSetAsync($"{applicationName}:{key}", value);
-//        }
-//    }
-
-//}
